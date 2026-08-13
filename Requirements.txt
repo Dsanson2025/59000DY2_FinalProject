@@ -1,11 +1,3 @@
-re
-os
-csv
-gzip
-io
-time
-logging
-streamlit
 requests
 beautifulsoup4
 lxml
