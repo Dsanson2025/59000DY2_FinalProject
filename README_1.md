@@ -1,139 +1,76 @@
-# Louisiana Sheriff Sale Scraper
+# Louisiana Sheriff Sale Deal Finder
 
-Scrapes upcoming sheriff sale / foreclosure listings for several Louisiana
-metro parishes and outputs a single formatted Excel workbook — classified
-by property type, enriched with free zip-level market comps, and (optionally)
-an estimated Market Value and Profit for each listing.
+An interactive Streamlit app that helps a commercial real-estate investor evaluate Louisiana sheriff sale (foreclosure auction) listings *before* bidding — combining descriptive analytics, a predictive price model, a deal simulator, and unsupervised deal-archetype clustering.
 
-## What it does
+## 1. Problem
 
-For every upcoming sale it can reach, the script pulls the case number, sale
-date, address, writ/sale price, and case description, then:
+Investors who bid at parish sheriff sales only know a listing's comps beforehand — its assessed **Market Value**, the neighborhood's **average $/sqft**, and the zip code's **median sale price** — not what the winning bid will actually be. Bidding blind makes it hard to set a maximum bid or judge whether a listing is likely to be a bargain. The app answers three questions before an investor bids:
 
-1. **Classifies the property type** — `Commercial`, `Land`, `Multi-Family`,
-   `Residential`, or `Unknown` — using keyword matching plus a heuristic that
-   flags a sale as Commercial when the defendant name looks like a business
-   entity (LLC, Inc., Corp., etc.) rather than a person.
-2. **Looks up free zip-level market data** — median $/sqft, median sale
-   price, and median list price from Redfin's public market tracker, plus
-   Census Bureau ACS median home values, keyed off the zip code in the
-   property address.
-3. **Optionally looks up the property's actual square footage** via the
-   Rentcast API (free tier, see [Optional: square footage lookups](#optional-square-footage-lookups-rentcast)
-   below) and uses `sqft × zip $/sqft` as a more precise Market Value
-   estimate. Without a Rentcast key, Market Value falls back to the zip's
-   median comp value.
-4. **Estimates Profit** as `Market Value − Writ/Sale Price`.
-5. Writes everything to `sheriff_sales_commercial.xlsx`, sorted with
-   Commercial listings first (then Land, Multi-Family, Residential, Unknown),
-   cheapest first within each group, with color-coded rows by property type,
-   clickable address (Google Maps) and source links, and green/red
-   highlighting on the Profit column.
+1. Which parishes and property types have historically produced the deepest discounts to market value?
+2. Given a new listing's comps, what auction price should I expect to pay, and does that clear my target discount?
+3. What "archetype" of deal does this listing resemble — a deep bargain, a fair trade, a thin margin, or an overpriced/risky one?
 
-## Parish coverage
+## 2. Data
 
-| Parish | Status | Notes |
-|---|---|---|
-| Orleans | ✅ Verified | CivilView SalesWeb (`countyId=28`) |
-| Ascension | ✅ Verified | CivilView SalesWeb (`countyId=55`) |
-| Jefferson | ✅ Verified | JPSO real estate sales list (auto-discovers the date-picker form) |
-| St. Tammany | ✅ Verified | Reverse-engineered AJAX endpoint (`RealEstateMovablesSearchResultsTable`) |
-| East Baton Rouge | ⚠️ Needs work | Results table is JS/AJAX-rendered; the underlying JSON endpoint hasn't been identified yet. See the `EBR_NOTE` comment in the script for how to find it via Chrome DevTools. |
-| Caddo, Calcasieu, Lafayette, Ouachita, Rapides, Terrebonne, Tangipahoa, Bossier | ❌ Not built | No working scrape source confirmed yet — several require phone calls, PDF legal notices, or paid platforms (e.g. Bid4Assets) that block scraping. These still appear in the output as `NOT_BUILT` rows so the gap is visible rather than silent. |
-
-A row's **Status** column tells you what happened: `OK` (parsed fine),
-`NEEDS_FIX` (page structure changed or a field couldn't be found),
-`NO_DATA` (ran fine, just nothing upcoming), or `NOT_BUILT` (no scraper
-exists yet for that parish).
-
-## Requirements
-
-- Python 3.9+
-- Install dependencies:
-
-  ```bash
-  pip install requests beautifulsoup4 openpyxl lxml
-  ```
-
-## Optional: square footage lookups (Rentcast)
-
-Without any setup, the script works out of the box using only free data
-(Redfin + Census) and estimates Market Value from zip-level comps. To get a
-more precise, property-specific Market Value based on actual square footage:
-
-1. Sign up free at [app.rentcast.io](https://app.rentcast.io) (50 requests/month on the free tier).
-2. Grab your API key from [app.rentcast.io/app/api-keys](https://app.rentcast.io/app/api-keys).
-3. Set it as an environment variable before running:
-
-   ```bash
-   # Mac/Linux
-   export RENTCAST_API_KEY=your_key_here
-
-   # Windows
-   set RENTCAST_API_KEY=your_key_here
-   ```
-
-   (Or paste it directly into the `RENTCAST_API_KEY` line near the top of
-   the script.)
-
-The script caps itself at 45 Rentcast calls per run so a single run can't
-exhaust the whole month's free-tier budget by itself; once the cap is hit
-(or for any address Rentcast can't match), it just falls back to the
-zip-level comp estimate instead of failing.
-
-## Usage
-
-```bash
-python sheriff_sale_scraper.py
-```
-
-This scrapes every verified parish's upcoming sale dates, enriches each
-listing with market data, and writes `sheriff_sales_commercial.xlsx` to the
-current folder. A run typically takes a few minutes — it deliberately waits
-~1.5 seconds between requests to each site to avoid hammering small
-government servers, and the first run also streams Redfin's ~1.5GB public
-market-tracker file (filtered down to Louisiana zips on the fly, so it
-doesn't load the whole thing into memory).
-
-## Output columns
+`sheriff_sales_commercial.csv` — 215 Louisiana sheriff-sale listings scraped from public parish sheriff-sale sites (St. Tammany, Orleans, Jefferson, East Baton Rouge, and others).
 
 | Column | Description |
 |---|---|
-| Parish | Which parish the sale belongs to |
-| Property Type | Commercial / Land / Multi-Family / Residential / Unknown |
-| Price | Writ or sale amount |
-| Address | Property address (click-through to Google Maps) |
-| Sale Date | Scheduled sheriff sale date |
-| Square Footage | Property-specific sqft from Rentcast (blank if no API key or no match) |
-| Avg $/sqft (Zip) | Redfin median $/sqft for that zip |
-| Zip Median Sale Price | Redfin median sale price for that zip |
-| Census Median Value | Census ACS 5-year median home value for that zip |
-| Market Value | `sqft × Avg $/sqft` when available, else the zip-level fallback |
-| Profit | `Market Value − Price` (green if positive, red if negative) |
-| Description | Case title / listing description |
-| Source URL | Link back to the source sheriff's office page |
-| Status | `OK`, `NEEDS_FIX`, `NO_DATA`, or `NOT_BUILT` |
+| Parish | Louisiana parish where the property sits |
+| Property Type | Commercial, Land, Residential, or Unknown |
+| Price | Auction (winning bid) price |
+| Address | Property address |
+| Sale Date | Auction date |
+| Avg $/sqft (Zip) | Comparable average $/sqft for the zip code |
+| Zip Median Sale Price | Comparable median sale price for the zip code |
+| Market Value | Assessed/appraised market value |
+| Profit | Market Value − Price (recomputed by the app for consistency) |
+| Description | Underlying lawsuit caption (plaintiff vs. defendant) |
+| Source URL | Originating sheriff-sale site |
+| Status | Scraper reliability flag (OK / NEEDS_FIX / NEEDS_JS / NOT_BUILT) |
 
-## Extending to a new parish
+**Cleaning steps** (all counted and shown live in the app sidebar):
+- Dropped the `Census Median Value` column (100% empty in the source file).
+- Dropped rows the scraper flagged as unreliable (`Status != "OK"`).
+- Parsed currency strings (`$1,234.56`) to numeric.
+- Dropped rows missing `Price`, `Market Value`, `Avg $/sqft (Zip)`, or `Zip Median Sale Price`.
+- Dropped rows with invalid values (negative price, non-positive market value/comps).
+- Recomputed `Profit` and `Margin` directly as `Market Value − Price` and `Profit / Market Value`, since the source `Profit` column had gaps.
 
-Most Louisiana sheriff/constable sale pages fall into one of a few patterns
-already handled here:
+## 3. Analytical approach
 
-- **CivilView SalesWeb** (`scrape_civilview`) — used by several parishes;
-  just needs the parish's `countyId`.
-- **Custom ASP.NET form with a date dropdown** (`scrape_jpso`) — auto-discovers
-  the form fields, so it can often be adapted with just a new base URL.
-- **AJAX/JSON endpoint** (`scrape_st_tammany`) — for sites whose results
-  table is loaded client-side; find the underlying request in Chrome
-  DevTools → Network tab, then mirror that pattern.
-- **Anything else** — `scrape_generic_sheriff_site()` is a best-effort
-  fallback: pass it a URL and a CSS selector for each sale row, and it will
-  fall back further to scanning the raw page text for `$` amounts and
-  property-type keywords if no selector is supplied.
+The app combines all three families of analysis, each on its own tab:
 
-## A note on responsible use
+- **Descriptive** (*Explore Sheriff Sales* tab) — filterable KPIs and charts: average margin by parish, auction price vs. market value with a margin threshold line, and property-type mix.
+- **Predictive** (*Model Reliability* + *Deal Simulator* tabs) — a **Multiple Linear Regression** predicts the auction `Price` from comps available *before* the auction (Market Value, Avg $/sqft, Zip Median Sale Price, Parish, Property Type). An 80/20 train/test split (`random_state=42`) reports R², Adjusted R², RMSE, and an overfitting check (gap between train and test Adjusted R²). The simulator applies the trained model to a candidate listing, derives an implied profit margin, and issues a go/no-go call against a user-adjustable target margin (default 50%), with an RMSE-based error band.
+- **Unsupervised** (*Deal Archetypes* tab) — **K-Means clustering** (2–6 clusters, adjustable) on standardized Price, Market Value, Avg $/sqft, and Margin groups historical sales into archetypes (e.g. "Deep Bargain" → "Overpriced / Risky"), visualized via PCA and browsable per archetype.
 
-This script only reads publicly posted sheriff sale listings and adds
-built-in delays between requests. Before pointing it at a new site, check
-that site's terms of use/robots.txt, and keep the request delay in place —
-these are small government servers, not commercial APIs.
+## 4. Repository contents
+
+```
+app.py                          # Streamlit application (all 4 tabs)
+requirements.txt                # Python dependencies
+sheriff_sales_commercial.csv    # Source dataset
+README.md                       # This file
+```
+
+## 5. Running locally
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+The app looks for `sheriff_sales_commercial.csv` in the same directory as `app.py`.
+
+## 6. Deploying to Streamlit Community Cloud
+
+1. Push `app.py`, `requirements.txt`, and `sheriff_sales_commercial.csv` to a public (or Streamlit-connected private) GitHub repository.
+2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
+3. Click **New app**, select the repo/branch, and set the main file path to `app.py`.
+4. Click **Deploy**. No secrets or API keys are required — the CSV ships alongside the app and loads at runtime.
+5. Copy the resulting public URL into your slide deck and video demo.
+
+## 7. Caveats
+
+Predictions and archetypes are for research/decision-support purposes only — not legal or investment advice. Always confirm the actual opening bid, lien status, and title condition on the parish sheriff's site before bidding. The regression is trained on 215 historical listings from a handful of parishes, so estimates should be treated as directional, especially for parishes or property types with few historical sales.
